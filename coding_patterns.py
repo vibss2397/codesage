@@ -905,11 +905,69 @@ class Trie:
     }
 }
 
-def process_pattern(pattern: dict):
-    """
-    Given a dict of coding pattern, process it and return a formatted string.
-    The string will be used for conversion to embeddings and vector storage.
-    """
-    return f"{pattern['description']}. " \
-           f"Use for: {', '.join(pattern['when_to_use'])}. " \
-           f"Recognizable by: {', '.join(pattern['code_detection']['inefficient_patterns'])}"
+
+def process_pattern(pattern_name):
+    """Convert pattern into RAG chunks"""
+    pattern = PATTERNS[pattern_name]
+    chunks = []
+    
+    # Define chunk templates
+    chunk_configs = [
+        {
+            "type": "problem_recognition",
+            "fields": ["when_to_use", "common_problems"],
+            "template": f"{pattern_name} solves: {{content}}"
+        },
+        {
+            "type": "inefficient_detection", 
+            "fields": ["detection_patterns.inefficient"],
+            "template": f"Inefficient patterns suggesting {pattern_name}: {{content}}"
+        },
+        {
+            "type": "optimal_approach",
+            "fields": ["detection_patterns.optimal"], 
+            "template": f"{pattern_name} optimal approach: {{content}}"
+        },
+        {
+            "type": "complexity_info",
+            "fields": ["time_complexity", "space_complexity"],
+            "template": f"{pattern_name} complexity: {{content}}"
+        }
+    ]
+    
+    # Generate chunks
+    for config in chunk_configs:
+        content_parts = []
+        for field in config["fields"]:
+            value = _get_nested_field(pattern, field)
+            if value:
+                content_parts.extend(value if isinstance(value, list) else [value])
+        
+        if content_parts:
+            chunks.append({
+                "pattern": pattern_name,
+                "chunk_type": config["type"],
+                "text": config["template"].format(content=", ".join(content_parts))
+            })
+    
+    return chunks
+
+def _get_nested_field(data, field_path):
+    """Helper to get nested dict values like 'detection_patterns.inefficient'"""
+    keys = field_path.split('.')
+    value = data
+    for key in keys:
+        value = value.get(key) if isinstance(value, dict) else None
+        if value is None:
+            break
+    return value
+
+
+if __name__ == "__main__":
+    # Example usage
+    chunks = process_pattern("two_pointers")
+    pattern_name = "two_pointers"
+    print(f"Processed chunks for {pattern_name}:")
+    for chunk in chunks:
+        print(chunk)
+        print('\n')
