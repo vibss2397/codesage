@@ -91,19 +91,22 @@ filling in later
 
 ## 📁 **Project Structure**
 ```
-leetcode_coach/
-├── config.py           # API keys and settings
-├── patterns.py         # Knowledge base (JSON format)
-├── rag_store.py        # Vector store implementation
+codesage/
 ├── agents/
 │   ├── analyze_agent.py
-│   ├── quality_agent.py
-│   └── strategy_coach.py
-├── tools/
-│   └── code_executor.py # Sandbox execution
-├── orchestrator.py     # Agent coordination
-├── app.py             # Streamlit interface
-└── test_system.py     # End-to-end testing
+│   └── base_agent.py
+├── prompts/
+│   └── analyze_agent_prompt.py
+├── tests/
+│   ├── test_agent.py
+│   ├── test_coding_patterns.py
+│   └── test_rag_store.py
+├── .gitignore
+├── coding_patterns.py
+├── project_plan.md
+├── rag_store.py
+├── requirements.txt
+└── test_analyze_agent.py
 ```
 
 ## 💡 **Key Innovations**

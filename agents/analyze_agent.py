@@ -6,7 +6,7 @@ from prompts.analyze_agent_prompt import SYSTEM_PROMPT as system_prompt
 
 class AnalyzeAgent:
     """
-    Analyze Agent built with the low-level genai.Client.
+    Analyze Agent built with the gemini SDK.
     """
     
     def __init__(self, rag_system, api_key: str):
