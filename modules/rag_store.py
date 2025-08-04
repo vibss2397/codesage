@@ -3,7 +3,7 @@ import faiss
 from typing import List, Dict, Any
 import numpy as np
 import os
-from coding_patterns import PATTERNS, process_pattern
+from modules.coding_patterns_knowledge_base import PATTERNS, process_pattern
 
 class CodingPatternRag:
     def __init__(self, api_key: str = None):
@@ -39,7 +39,7 @@ class CodingPatternRag:
         """
         embeddings = []
         
-        for text in texts[:3]:
+        for text in texts:
             try:
                 result = self.client.models.embed_content(
                     model=self.embedding_model,
@@ -139,6 +139,22 @@ class CodingPatternRag:
         
         return results
     
+    def convert_to_query(self, rag_results: List[Dict[str, Any]]) -> str:
+        """
+        Convert RAG results to a query string
+        """
+        final_results = """
+        ## RAG RESULTS:"""
+        for i, result in enumerate(rag_results):
+            final_results += f"""
+            - Result {i + 1}:
+            Pattern: {result['pattern']}
+            Chunk Type: {result['chunk_type']}
+            Text: {result['text']}
+            Similarity score: {round(float(result['similarity_score']), 4)}
+        """
+        return final_results
+
     def get_pattern_info(self, pattern_name: str) -> Dict[str, Any]:
         """
         Get full information for a specific pattern

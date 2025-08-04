@@ -1,4 +1,4 @@
-from rag_store import CodingPatternRag
+from modules.rag_store import CodingPatternRag
 from dotenv import load_dotenv
 
 # Load environment variables

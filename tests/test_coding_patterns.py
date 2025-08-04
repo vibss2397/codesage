@@ -1,5 +1,5 @@
 # Test script for process_pattern function
-from coding_patterns import process_pattern
+from modules.coding_patterns_knowledge_base import process_pattern
 # Sample patterns data for testing
 TEST_PATTERNS = {
     "two_pointers": {

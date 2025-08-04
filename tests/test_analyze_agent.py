@@ -1,33 +1,38 @@
-from rag_store import CodingPatternRag
 from agents.analyze_agent import AnalyzeAgent
+from agents.qa_agent import QAAgent
 import json
 from dotenv import load_dotenv
 load_dotenv()
 import os
 
 
-if __name__ == "__main__":
-    API_KEY = os.getenv('GEMINI_API_KEY')
-    # Test problem and code
-    problem = "Check if a string is a valid palindrome"
-    code = """
-def is_palindrome(s):
-    clean = ''.join(c.lower() for c in s if c.isalnum())
-    for i in range(len(clean)):
-        for j in range(len(clean)):
-            if clean[i] != clean[len(clean)-1-i]:
-                return False
-    return True
+    # Test Case 2: Sliding Window (distinctive keywords)
+problem1 = """
+    Find the length of the longest substring without repeating characters.
+    Given a string s, find the length of the longest substring without repeating characters.
+    """
+    
+code1 = """
+def lengthOfLongestSubstring(s):
+    max_len = 0
+    for i in range(len(s)):
+        for j in range(i, len(s)):
+            substring = s[i:j+1]
+            if len(set(substring)) == len(substring):
+                max_len = max(max_len, len(substring))
+            else:
+                break
+    return max_len
 """
-    
-    print("🤖 ANALYZE AGENT TEST")
-    print(f"Problem: {problem}")
-    print(f"Code length: {len(code)} characters")
-    print("\nAgent will use RAG tools to analyze this solution...")
-    
-    # Note: Requires initialized RAG system
-    rag = CodingPatternRag()
-    rag.add_patterns()
-    agent = AnalyzeAgent(rag, API_KEY)
-    result = agent.analyze_solution(problem, code)
-    print(json.dumps(result, indent=2))
+agent = AnalyzeAgent(api_key=os.getenv("GEMINI_API_KEY"))
+result = agent.analyze_solution(problem1, code1)
+print(result)
+
+print('running qa agent')
+qa_agent = QAAgent(api_key=os.getenv("GEMINI_API_KEY"))
+result_qa = qa_agent.analyze_solution(
+    question=problem1,
+    code_solution=code1,
+    analyze_results=result
+)
+print(json.dumps(result_qa, indent=2))

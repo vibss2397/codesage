@@ -1,23 +1,16 @@
-from google import genai
-from google.genai import types
-from typing import Dict, Any, List
-import json
+from typing import Dict, Any
 from prompts.qa_code_agent_prompt import SYSTEM_PROMPT as system_prompt
+from agents.base_agent import BaseAgent
+from schemas.qa_agent_schema import QaAgentInput, QaAgentOutput
 
-class QAAgent:
-    """
-    Agent meant to be a QA engineer.
-    """
-    
-    def __init__(self, api_key: str):
+class QaAgent(BaseAgent):
+    def __init__(self, api_key, task_id=None, db=None):
+        super().__init__(api_key, task_id, db)
         self.system_prompt = system_prompt
-        
-        # 1. Initialize the low-level client
-        self.client = genai.Client(api_key=api_key)
 
-    def qa_analysis(self, question: str, code_solution: str) -> Dict[str, Any]:
+    def analyze_solution(self, input: QaAgentInput) -> QaAgentOutput:
         """
-        Perform QA analysis on the given question and code solution.
+        Main business logic method for analyzing a solution.
         
         Args:
             question (str): The leetcode problem statement.
@@ -26,33 +19,26 @@ class QAAgent:
         Returns:
             Dict[str, Any]: The analysis results in JSON format.
         """
-        # Prepare the input data
-        input_data = {
-            "question": question,
-            "code_solution": code_solution
-        }
+        self.update_status("Analyzing code solution for QA stuff")
         
-        # Call the GenAI API with the system prompt and input data
-        response = self.client.models.generate_content(
-            model="gemini-2.5-flash",
-            config=types.GenerateContentConfig(
-                system_instruction=self.system_prompt),
-            contents=json.dumps(input_data, indent=4),
+        # Prepare the user prompt
+        user_prompt = f"""
+        QUESTION: {input.question}
+
+        CODE SOLUTION: {input.code_solution}
+
+        ANALYSIS CONTEXT:
+            - Edge case categories: {input.analyze_results['edge_cases']}
+            - Current complexity: {input.analyze_results['current_complexity']}
+            - Optimal pattern: {input.analyze_results['optimal_pattern']}
+
+        Please provide a comprehensive QA analysis based on the above context.
+        """
+        
+        # Call the model with the user prompt
+        response_text = self.call_model(user_prompt)
+        
+        # Parse the JSON response
+        return QaAgentOutput(
+            **self.parse_json_response(response_text)
         )
-        
-        # Parse the response
-        try:
-            res = response.text
-        except Exception as e:
-            print(f"Error in response: {e}")
-            return {}
-        
-        for separators in ("```json", "```"):
-            res = res.replace(separators, "")
-            
-        try:
-            return json.loads(res)
-        except:
-            print("Failed to parse JSON response")
-            return {"error": "Invalid JSON response from the model"}
-        
