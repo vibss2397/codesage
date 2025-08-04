@@ -21,8 +21,11 @@ class OrchestratorAgent(BaseAgent):
     def __init__(self, api_key, task_id=None, db=None):
         super().__init__(api_key, task_id, db)
         self.system_prompt = "You are the orchestrator agent responsible for coordinating the workflow of various agents."
-        self.code_executor = CodeExecutor(api_key, task_id, db)
-        self.execution_analyzer = ExecutionAnalyzer(api_key, task_id, db)
+        self.code_executor = CodeExecutor()
+        self.execution_analyzer = ExecutionAnalyzer()
+        self.api_key = api_key
+        self.task_id = task_id
+        self.db = db
     
     def execute(self, input: OrchestratorAgentInput) -> OrchestratorAgentOutput:
         """
@@ -42,7 +45,7 @@ class OrchestratorAgent(BaseAgent):
         problem_analysis = agent.execute(
             AnalyzeAgentInput(
                 problem=input.problem,
-                code_solution=input.code_solution
+                code=input.code_solution
             )
         )
 
@@ -56,6 +59,7 @@ class OrchestratorAgent(BaseAgent):
                 analyze_results=problem_analysis
             )
         )
+
         # Step 3: Execute the code solution
         self.update_status("Executing code solution")
         execution_results = self.code_executor.run_test_cases(input.code_solution, qa_results.test_cases)
@@ -78,6 +82,6 @@ class OrchestratorAgent(BaseAgent):
         )
         self.update_status("Orchestration complete")
         return OrchestratorAgentOutput(
-            problem_area=synthesis_output.problem_area,
+            problem_area=synthesis_output.priority_focus,
             hint=synthesis_output.hint
         )

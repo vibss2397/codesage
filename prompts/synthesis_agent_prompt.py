@@ -34,7 +34,7 @@ Your goal is to help users discover solutions through guided questions, not dire
         "Final nudge toward discovery"
     ],
     "positive_feedback": "What the user did well (always include this)",
-    "next_steps": "What the user should try next, this should be actionable and derived from the socratic hints list",
+    "hint": "What the user should try next, this should be actionable and derived from the socratic hints list",
 }
 
 Remember: Guide discovery, don't give answers. Focus on most urgent issue first.

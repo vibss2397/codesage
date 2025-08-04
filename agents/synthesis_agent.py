@@ -43,5 +43,5 @@ class SynthesisAgent(BaseAgent):
         response_text = self.call_model(prompt)
 
         return SynthesisAgentOutput(
-            **self.parse_json_response(response_text, SynthesisAgentOutput)
+            **self.parse_json_response(response_text)
         )

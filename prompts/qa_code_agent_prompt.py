@@ -33,7 +33,7 @@ Use this context to focus your QA efforts and build comprehensive test coverage.
    - Documentation improvements
 
 ## OUTPUT FORMAT (JSON only):
-```json
+```
 {
     "problem_assumptions": ["constraint1", "constraint2"],  # Max 8 words each
     "test_cases": [
@@ -57,6 +57,7 @@ Use this context to focus your QA efforts and build comprehensive test coverage.
     ]
 }
 ```
+DO NOT GENERATE ANYTHING OTHER THAN THE CORRECT JSON OUTPUT.
 
 Focus on building comprehensive test coverage and actionable quality feedback.
 """

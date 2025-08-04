@@ -8,7 +8,7 @@ class QaAgent(BaseAgent):
         super().__init__(api_key, task_id, db)
         self.system_prompt = system_prompt
 
-    def analyze_solution(self, input: QaAgentInput) -> QaAgentOutput:
+    def execute(self, input: QaAgentInput) -> QaAgentOutput:
         """
         Main business logic method for analyzing a solution.
         
@@ -28,9 +28,9 @@ class QaAgent(BaseAgent):
         CODE SOLUTION: {input.code_solution}
 
         ANALYSIS CONTEXT:
-            - Edge case categories: {input.analyze_results['edge_cases']}
-            - Current complexity: {input.analyze_results['current_complexity']}
-            - Optimal pattern: {input.analyze_results['optimal_pattern']}
+            - Edge case categories: {input.analyze_results.edge_cases}
+            - Current complexity: {input.analyze_results.current_complexity}
+            - Optimal pattern: {input.analyze_results.optimal_pattern}
 
         Please provide a comprehensive QA analysis based on the above context.
         """

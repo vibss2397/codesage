@@ -101,6 +101,7 @@ Each pattern includes:
 ## Improvements:
 - rag system can be improved, currently a lot of cases override
 - code executor can be improved to make the system more robust
+- prompt can generate a full weird response like hindi in the middle
 
 ## 🎪 Demo Examples
 
