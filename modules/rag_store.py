@@ -3,182 +3,129 @@ import faiss
 from typing import List, Dict, Any
 import numpy as np
 import os
-from modules.coding_patterns_knowledge_base import PATTERNS, process_pattern
+from modules.coding_problems_knowledge_base import PROBLEM_KNOWLEDGE_BASE, create_retrieval_chunks
 
-class CodingPatternRag:
-    def __init__(self, api_key: str = None):
-        """
-        Initialize RAG with Gemini embeddings API
-        
-        Args:
-            api_key: Gemini API key. If None, reads from GEMINI_API_KEY env var
-        """
-        # Configure Gemini API
-        if api_key is None:
-            api_key = os.getenv('GEMINI_API_KEY')
-            if not api_key:
-                raise ValueError("Gemini API key required. Set GEMINI_API_KEY env var or pass api_key parameter")
-        
-        self.client = genai.Client(api_key=api_key)
-        
-        # Initialize FAISS index (we'll set dimension after first embedding call)
-        self.index = None
-        self.chunks = []  # Store chunk metadata
-        self.embedding_model = "models/embedding-001"  # Gemini embedding model
-        self.output_dim = 768  # Default output dimension for Gemini embeddings
-        
-    def _get_embeddings(self, texts: List[str]) -> np.ndarray:
-        """
-        Get embeddings from Gemini API for list of texts
-        
-        Args:
-            texts: List of text strings to embed
-            
-        Returns:
-            numpy array of embeddings
-        """
-        embeddings = []
-        
-        for text in texts:
-            try:
-                result = self.client.models.embed_content(
-                    model=self.embedding_model,
-                    contents=text,
-                    config=genai.types.EmbedContentConfig(output_dimensionality=self.output_dim) # Specify output dimensionality
-                )
-                embeddings.append(result.embeddings[0].values)
-            except Exception as e:
-                print(f"Error getting embedding for text: {text[:50]}...")
-                print(f"Error: {e}")
-                # Use zero vector as fallback
-                embeddings.append([0.0] * self.output_dim)  # Hardcoded dimension, can be adjusted based on model
-        return np.array(embeddings, dtype=np.float32)
+# ==============================================================================
+# The following functions would be in a separate "builder" script,
+# used for the one-time setup of the index.
+# ==============================================================================
+OUTPUT_DIM = 768  # Default output dimension for Gemini embeddings
+def _get_batch_embeddings(api_key: str, texts: List[str]) -> np.ndarray:
+    """Helper function to get embeddings for a list of texts."""
+    client = genai.Client(api_key=api_key)
+    # Note: The Gemini API currently processes one string at a time in embed_content.
+    # A real production system might use batching if the API supports it in the future.
+    embeddings = [
+        np.array(
+            client.models.embed_content(
+                model="gemini-embedding-001", 
+                contents=text,
+                config=genai.types.EmbedContentConfig(output_dimensionality=OUTPUT_DIM) # Specify output dimensionality
+            ).embeddings[0].values)
+        for text in texts
+    ]
+    return np.array(embeddings, dtype=np.float32)
+
+def build_rag_index(api_key: str, knowledge_base: dict) -> tuple:
+    """
+    Builds the FAISS index and mappings from the knowledge base.
+    This is a one-time setup process.
+    """
+    print("Processing knowledge base into retrieval chunks...")
+    chunks = create_retrieval_chunks(knowledge_base)
     
-    def _get_single_embedding(self, text: str) -> np.ndarray:
+    chunk_texts = [chunk['text'] for chunk in chunks]
+    index_to_key_map = [chunk['metadata']['problem_key'] for chunk in chunks]
+
+    print(f"Generated {len(chunk_texts)} chunks for embedding.")
+    
+    print("Generating embeddings...")
+    embeddings = _get_batch_embeddings(api_key, chunk_texts)
+    faiss.normalize_L2(embeddings)  # Normalize for cosine similarity
+    embedding_dim = embeddings.shape[1]
+    index = faiss.IndexFlatIP(embedding_dim)
+    index.add(embeddings)
+    
+    print(f"Successfully built FAISS index with {index.ntotal} vectors.")
+    
+    # In a real app, you would save the index and map to disk here
+    # faiss.write_index(index, "problems.index")
+    # with open("index_map.json", "w") as f:
+    #     json.dump(index_to_key_map, f)
+
+    return index, index_to_key_map
+
+
+# ==============================================================================
+class CodingProblemRagStore:
+    """
+    A retrieval store for coding problems using a FAISS index and Gemini embeddings.
+    This class is responsible for searching for semantically similar problems.
+    """
+    def __init__(self, api_key: str, knowledge_base: dict, index, index_to_key_map: list):
         """
-        Get embedding for a single text string
-        
+        Initializes the RAG store.
+
         Args:
-            text: Text string to embed
-            
-        Returns:
-            numpy array of single embedding
+            api_key: Your Gemini API key.
+            knowledge_base: The full dictionary of problem data.
+            index: A pre-built FAISS index of the problem embeddings.
+            index_to_key_map: A list mapping a FAISS vector index to its problem_key.
         """
+        self.client = genai.Client(api_key=api_key)
+        self.knowledge_base = knowledge_base
+        self.index = index
+        self.index_to_key_map = index_to_key_map
+        self.embedding_model = "gemini-embedding-001"
+        self.output_dim = OUTPUT_DIM
+
+    def _get_single_embedding(self, text: str) -> np.ndarray:
+        """Generates an embedding for a single text query."""
         try:
             result = self.client.models.embed_content(
                 model=self.embedding_model,
                 contents=text,
                 config=genai.types.EmbedContentConfig(output_dimensionality=self.output_dim) # Specify output dimensionality
             )
-            return np.array([result.embeddings[0].values], dtype=np.float32)
+            return np.array(result.embeddings[0].values, dtype=np.float32).reshape(1, -1)
         except Exception as e:
             print(f"Error getting embedding for query: {text[:50]}...")
             print(f"Error: {e}")
-            return np.zeros((1, self.output_dim), dtype=np.float32)  # Use zero vector as fallback
-    
-    def add_patterns(self):
+            return np.zeros((1, self.output_dim), dtype=np.float32)
+
+    def search(self, query: str, k: int = 3, similarity_threshold: float = 0.70) -> List[Dict[str, Any]]:
         """
-        Process all patterns and add their chunks to FAISS index
-        """
-        print("Processing patterns into chunks...")
-        
-        # Generate chunks from all patterns
-        for pattern in PATTERNS:
-            chunks = process_pattern(pattern)
-            self.chunks.extend(chunks)
-        chunk_texts = [chunk['text'] for chunk in self.chunks]
-        
-        print(f"Generated {len(chunk_texts)} chunks")
-        print("Getting embeddings from Gemini API...")
-        
-        # Get embeddings using Gemini API
-        embeddings = self._get_embeddings(chunk_texts)
-        
-        # Initialize FAISS index with correct dimension
-        embedding_dim = embeddings.shape[1]
-        self.index = faiss.IndexFlatL2(embedding_dim)
-        
-        # Add embeddings to FAISS
-        self.index.add(embeddings)
-        
-        print(f"✅ Added {len(chunk_texts)} chunks to FAISS index")
-        print(f"✅ Embedding dimension: {embedding_dim}")
-    
-    def search_similar(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
-        """
-        Search for similar pattern chunks based on query
-        
+        Searches for similar coding problems and returns their full data packets.
+
         Args:
-            query: Search query text
-            k: Number of top results to return
-            
+            query: The user's problem description.
+            k: The number of top results to return.
+            similarity_threshold: The minimum similarity score for a result to be considered a match.
+
         Returns:
-            List of dictionaries containing chunk info and similarity scores
+            A list of full problem packet dictionaries that meet the similarity threshold.
         """
-        if self.index is None or not self.chunks:
-            raise ValueError("No patterns loaded. Call add_patterns() first.")
-        
-        # Get query embedding
+        if self.index is None:
+            raise ValueError("The FAISS index is not loaded.")
+
         query_embedding = self._get_single_embedding(query)
-        
-        # Search FAISS index
+        faiss.normalize_L2(query_embedding)  # Normalize for cosine similarity
         distances, indices = self.index.search(query_embedding, k)
-        
-        # Format results
         results = []
         for i, idx in enumerate(indices[0]):
-            if idx != -1 and idx < len(self.chunks):
-                chunk = self.chunks[idx]
-                results.append({
-                    'pattern': chunk['pattern'],
-                    'chunk_type': chunk['chunk_type'],
-                    'text': chunk['text'], 
-                    'distance': float(distances[0][i]),
-                    'similarity_score': 1.0 / (1.0 + distances[0][i])  # Convert distance to similarity
-                })
+            # Check for valid index and non-negative distance
+            similarity = distances[0][i]
+            if idx != -1 and similarity >= 0:
+                if similarity >= similarity_threshold:
+                    problem_key = self.index_to_key_map[idx]
+                    problem_packet = self.knowledge_base.get(problem_key)
+                    if problem_packet:
+                        results.append({
+                            "similarity_score": round(float(similarity), 4),
+                            "problem": problem_packet
+                        })
+        
+        if not results:
+            print("No results found above the similarity threshold.")
         
         return results
-    
-    def convert_to_query(self, rag_results: List[Dict[str, Any]]) -> str:
-        """
-        Convert RAG results to a query string
-        """
-        final_results = """
-        ## RAG RESULTS:"""
-        for i, result in enumerate(rag_results):
-            final_results += f"""
-            - Result {i + 1}:
-            Pattern: {result['pattern']}
-            Chunk Type: {result['chunk_type']}
-            Text: {result['text']}
-            Similarity score: {round(float(result['similarity_score']), 4)}
-        """
-        return final_results
-
-    def get_pattern_info(self, pattern_name: str) -> Dict[str, Any]:
-        """
-        Get full information for a specific pattern
-        
-        Args:
-            pattern_name: Name of the pattern
-            
-        Returns:
-            Full pattern dictionary from PATTERNS
-        """
-        return PATTERNS.get(pattern_name, {})
-    
-    def list_available_patterns(self) -> List[str]:
-        """Get list of all available pattern names"""
-        return list(PATTERNS.keys())
-    
-    def get_chunks_for_pattern(self, pattern_name: str) -> List[Dict[str, Any]]:
-        """
-        Get all chunks for a specific pattern
-        
-        Args:
-            pattern_name: Name of the pattern
-            
-        Returns:
-            List of chunks for that pattern
-        """
-        return [chunk for chunk in self.chunks if chunk['pattern'] == pattern_name]
